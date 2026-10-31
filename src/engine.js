@@ -43,8 +43,7 @@ export class StockfishEngine {
     if(this.pending) throw new Error("Предыдущий анализ ещё выполняется.");
     this.lines.clear();
     this.send("setoption name MultiPV value "+multiPv);
-    this.send("isready");
-    await new Promise((resolve,reject)=>{this.readyResolve=resolve;setTimeout(()=>{if(this.readyResolve){this.readyResolve=null;reject(new Error("Тайм-аут подготовки движка."));}},10000);});
+    await new Promise((resolve,reject)=>{this.readyResolve=resolve;this.send("isready");setTimeout(()=>{if(this.readyResolve){this.readyResolve=null;reject(new Error("Тайм-аут подготовки движка."));}},10000);});
     const activeColor=fen.split(" ")[1]||"w";
     return new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{this.pending=null;reject(new Error("Stockfish превысил лимит времени."));},90000);
