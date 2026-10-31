@@ -11,7 +11,7 @@ function parseInfo(line, activeColor) {
 }
 
 export class StockfishEngine {
-  constructor(workerUrl="/stockfish/stockfish-18-lite-single.js") {
+  constructor(workerUrl=`${import.meta.env.BASE_URL}stockfish/stockfish-18-lite-single.js`) {
     this.worker=new Worker(workerUrl);
     this.ready=false;
     this.pending=null;
