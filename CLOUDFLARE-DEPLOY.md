@@ -2,13 +2,12 @@
 
 1. Import this GitHub repository into Cloudflare Pages.
 2. Framework preset: **Vite**. Build command: `npm run build`. Output directory: `dist`.
-3. After the first deployment, open **Settings → Variables and Secrets** and add `GEMINI_API_KEY` as an encrypted secret. Never place this key in Vite variables or client code.
-4. Optional: set `GEMINI_MODEL` as a normal server-side variable if you need to select another supported Gemini model.
+3. Add `GEMINI_API_KEY` as an encrypted secret under **Settings → Variables and Secrets**.
+4. Optional: set `GEMINI_MODEL` as a server-side variable to choose another supported Gemini model.
 
-The `/api/status` endpoint reports whether the server secret exists. The `/api/explain` endpoint provides preliminary natural-language commentary only. It does not claim Stockfish evaluations.
+The build script copies the Stockfish 18 lite single-threaded JS and WASM files from the pinned npm dependency into `public/stockfish`. The app runs the engine locally in the browser; Gemini is used only for explanations.
 
-## Current limitations
-
-- Stockfish is not integrated yet; no engine score, MultiPV, depth, nodes, or accuracy is produced.
-- AI commentary is explicitly marked as preliminary and must not be treated as an engine verdict.
-- A real Stockfish 18 WebAssembly worker and per-ply analysis pipeline are still required before calling this a complete chess analyzer.
+## Notes
+- The lite engine is single-threaded and avoids SharedArrayBuffer/cross-origin isolation requirements.
+- The current pass analyses each position to depth 14 with MultiPV 3. More advanced time/depth controls and per-move classifications remain future work.
+- The API key must never be stored in Vite client variables.
