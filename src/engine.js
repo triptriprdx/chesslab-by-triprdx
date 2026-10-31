@@ -2,11 +2,11 @@ function parseInfo(line, activeColor) {
   if (!line.startsWith("info ")) return null;
   const get = (key) => { const m=line.match(new RegExp("\\b"+key+"\\s+([^\\s]+)")); return m?.[1]; };
   const depth=Number(get("depth")||0), nodes=Number(get("nodes")||0), nps=Number(get("nps")||0), multipv=Number(get("multipv")||1);
-  const scoreMatch=line.match(/\\bscore\\s+(cp|mate)\\s+(-?\\d+)/);
+  const scoreMatch=line.match(/\bscore\s+(cp|mate)\s+(-?\d+)/);
   if (!scoreMatch) return null;
   let value=Number(scoreMatch[2]);
   if(activeColor==="b") value=-value;
-  const pvMatch=line.match(/\\bpv\\s+(.+)$/);
+  const pvMatch=line.match(/\bpv\s+(.+)$/);
   return {depth,nodes,nps,multipv,scoreType:scoreMatch[1],score:value,rawScore:Number(scoreMatch[2]),pv:pvMatch?.[1]||""};
 }
 
@@ -26,24 +26,35 @@ export class StockfishEngine {
       }
       if(line.startsWith("bestmove ")&&this.pending){
         const pending=this.pending;this.pending=null;clearTimeout(pending.timer);
-        pending.resolve({bestmove:line.split(/\\s+/)[1],lines:[...this.lines.values()].sort((a,b)=>a.multipv-b.multipv)});
+        pending.resolve({bestmove:line.split(/\s+/)[1],lines:[...this.lines.values()].sort((a,b)=>a.multipv-b.multipv)});
       }
     };
     this.worker.onerror=()=>{if(this.pending){this.pending.reject(new Error("Не удалось запустить Stockfish. Проверьте загрузку файлов движка."));this.pending=null;}};
   }
   send(command){this.worker.postMessage(command);}
+  async waitReady(timeout=15000){
+    await new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>{if(this.readyResolve){this.readyResolve=null;reject(new Error("Stockfish не ответил на isready."));}},timeout);
+      this.readyResolve=()=>{clearTimeout(timer);this.readyResolve=null;resolve();};
+      this.send("isready");
+    });
+  }
   async init(){
     if(this.ready)return;
-    await new Promise((resolve,reject)=>{this.uciResolve=resolve;this.uciReject=reject;this.send("uci");setTimeout(()=>{if(this.uciResolve){this.uciResolve=null;reject(new Error("Stockfish не ответил на UCI."));}},20000);});
+    await new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>{if(this.uciResolve){this.uciResolve=null;reject(new Error("Stockfish не ответил на UCI."));}},20000);
+      this.uciResolve=()=>{clearTimeout(timer);this.uciResolve=null;resolve();};
+      this.send("uci");
+    });
+    await this.waitReady();
     this.ready=true;
-    await new Promise((resolve,reject)=>{this.readyResolve=resolve;this.send("isready");setTimeout(()=>{if(this.readyResolve){this.readyResolve=null;reject(new Error("Stockfish не готов."));}},20000);});
   }
   async analyze(fen,{depth=14,multiPv=3,onInfo}={}){
     await this.init();
     if(this.pending) throw new Error("Предыдущий анализ ещё выполняется.");
     this.lines.clear();
     this.send("setoption name MultiPV value "+multiPv);
-    await new Promise((resolve,reject)=>{this.readyResolve=resolve;this.send("isready");setTimeout(()=>{if(this.readyResolve){this.readyResolve=null;reject(new Error("Тайм-аут подготовки движка."));}},10000);});
+    await this.waitReady();
     const activeColor=fen.split(" ")[1]||"w";
     return new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{this.pending=null;reject(new Error("Stockfish превысил лимит времени."));},90000);
