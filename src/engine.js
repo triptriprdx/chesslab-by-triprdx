@@ -29,13 +29,26 @@ export class StockfishEngine {
         pending.resolve({bestmove:line.split(/\s+/)[1],lines:[...this.lines.values()].sort((a,b)=>a.multipv-b.multipv)});
       }
     };
-    this.worker.onerror=()=>{if(this.pending){this.pending.reject(new Error("Не удалось запустить Stockfish. Проверьте загрузку файлов движка."));this.pending=null;}};
+    this.worker.onerror=(event)=>{
+      const detail=event?.message ? ": "+event.message : "";
+      const error=new Error("Ошибка загрузки Stockfish"+detail+". Проверьте файлы движка и WASM.");
+      if(this.pending){clearTimeout(this.pending.timer);this.pending.reject(error);this.pending=null;}
+      if(this.uciResolve){this.uciResolve=null;this.uciReject?.(error);}
+      if(this.readyResolve){this.readyResolve=null;this.readyReject?.(error);}
+    };
+    this.worker.onmessageerror=()=>{
+      const error=new Error("Браузер не смог прочитать ответ Stockfish.");
+      if(this.pending){clearTimeout(this.pending.timer);this.pending.reject(error);this.pending=null;}
+      if(this.uciReject){this.uciReject(error);this.uciReject=null;}
+      if(this.readyReject){this.readyReject(error);this.readyReject=null;}
+    };
   }
   send(command){this.worker.postMessage(command);}
   async waitReady(timeout=15000){
     await new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{if(this.readyResolve){this.readyResolve=null;reject(new Error("Stockfish не ответил на isready."));}},timeout);
-      this.readyResolve=()=>{clearTimeout(timer);this.readyResolve=null;resolve();};
+      this.readyResolve=()=>{clearTimeout(timer);this.readyResolve=null;this.readyReject=null;resolve();};
+      this.readyReject=(error)=>{clearTimeout(timer);this.readyResolve=null;this.readyReject=null;reject(error);};
       this.send("isready");
     });
   }
@@ -43,7 +56,8 @@ export class StockfishEngine {
     if(this.ready)return;
     await new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{if(this.uciResolve){this.uciResolve=null;reject(new Error("Stockfish не ответил на UCI."));}},20000);
-      this.uciResolve=()=>{clearTimeout(timer);this.uciResolve=null;resolve();};
+      this.uciResolve=()=>{clearTimeout(timer);this.uciResolve=null;this.uciReject=null;resolve();};
+      this.uciReject=(error)=>{clearTimeout(timer);this.uciResolve=null;this.uciReject=null;reject(error);};
       this.send("uci");
     });
     await this.waitReady();
